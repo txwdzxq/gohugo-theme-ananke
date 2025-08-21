@@ -1,10 +1,13 @@
 name: Auto Tag Patch
 
+# 触发条件：每次 push 到 fork 分支，或者手动触发
 on:
   push:
     branches:
       - txwdzxq-patch-1
+  workflow_dispatch:
 
+# 权限：允许 workflow push tag
 permissions:
   contents: write
 
@@ -13,25 +16,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout 仓库，拉取完整历史和所有 tag
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      # 2️⃣ 获取最新 tag
       - name: Get latest tag
         id: get_tag
         run: |
-          latest_tag=$(git describe --tags --abbrev=0)
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            latest_tag=$(git describe --tags --abbrev=0)
+          else
+            latest_tag="v0.0.0"
+          fi
           echo "Latest tag: $latest_tag"
           echo "latest_tag=$latest_tag" >> $GITHUB_ENV
 
-      - name: Bump patch
+      # 3️⃣ 递增 patch 版本并生成新 tag
+      - name: Bump patch version
         run: |
-          IFS='.' read -r major minor patch <<< "${{ env.latest_tag#v }}"
+          latest_tag="${{ env.latest_tag }}"
+          # 去掉前缀 v
+          tag_no_v="${latest_tag#v}"
+          # 拆分 major.minor.patch
+          IFS='.' read -r major minor patch <<< "$tag_no_v"
           new_patch=$((patch + 1))
           new_tag="v${major}.${minor}.${new_patch}"
-          echo "new_tag=$new_tag"
+          echo "New tag: $new_tag"
+          # 配置 Git 用户信息
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+          # 创建新 tag 并 push 回 fork
           git tag $new_tag
           git push origin $new_tag
